@@ -7,8 +7,8 @@ import os
 app = FastAPI()
 
 # Face++ API Configuration
-FACEPP_API_KEY = "O4P55oEEkbxD9Uye49eaCmKvePkFvc2J"
-FACEPP_API_SECRET = "yOybG-c0pYprSXd4OznnhsnSk_MAhhLS"
+FACEPP_API_KEY = "xxx"
+FACEPP_API_SECRET = "xxx"
 FACEPP_API_ENDPOINT = "https://api-us.faceplusplus.com/facepp/v3/detect"
 
 # Mount the static directory to serve static files

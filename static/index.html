@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face++ Analyzer</title>
+    <style>
+        video, canvas {
+            width: 640px;
+            height: 480px;
+            border: 1px solid black;
+        }
+        #recommendation {
+            margin-top: 20px;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Face++ Analyzer</h1>
+    <video id="webcam" autoplay></video>
+    <canvas id="overlay"></canvas>
+    <div id="recommendation">Waiting for recommendations...</div>
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('overlay');
+        const context = canvas.getContext('2d');
+        const recommendationElement = document.getElementById('recommendation');
+
+        async function setupWebcam() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                };
+            } catch (error) {
+                console.error('Error accessing webcam:', error);
+                recommendationElement.textContent = `Error accessing webcam: ${error.message}`;
+            }
+        }
+
+        async function sendFrameToServer() {
+            try {
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const dataUrl = canvas.toDataURL('image/jpeg');
+                const blob = await fetch(dataUrl).then(res => res.blob());
+                const formData = new FormData();
+                formData.append('file', blob);
+
+                const response = await fetch('/detect_attributes', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server Error: ${errorText}`);
+                }
+
+                const result = await response.json();
+                drawOverlay(result);
+                if (result.headPose) {
+                    generateRecommendation(result.headPose, result.eyeStatus, result.emotion);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                recommendationElement.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function drawOverlay(result) {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            if (result.error) {
+                recommendationElement.textContent = result.error;
+                return;
+            }
+            context.strokeStyle = 'red';
+            context.lineWidth = 2;
+            context.fillText(`Head Pose: ${JSON.stringify(result.headPose)}`, 10, 10);
+            context.fillText(`Eye Status: ${JSON.stringify(result.eyeStatus)}`, 10, 30);
+            context.fillText(`Emotion: ${JSON.stringify(result.emotion)}`, 10, 50);
+        }
+
+        async function generateRecommendation(headPose, eyeStatus, emotion) {
+            // You can add logic here to generate recommendations based on the detected attributes
+            recommendationElement.textContent = 'Recommendations based on the detected attributes will appear here.';
+        }
+
+        setupWebcam();
+        setInterval(sendFrameToServer, 5000);  // Adjust the interval as needed
+    </script>
+</body>
+</html>

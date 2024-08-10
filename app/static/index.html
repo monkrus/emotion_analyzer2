@@ -6,26 +6,42 @@
     <title>Face++ Analyzer</title>
     <style>
         video, canvas {
-            width: 640px;
-            height: 480px;
+            width: 320px;
+            height: 240px;
             border: 1px solid black;
+            margin-right: 20px;
+        }
+        #container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
         #recommendation {
             margin-top: 20px;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        #results {
             font-size: 1.2em;
+            font-weight: bold;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
     <h1>Face++ Analyzer</h1>
-    <video id="webcam" autoplay></video>
-    <canvas id="overlay"></canvas>
-    <div id="recommendation">Waiting for recommendations...</div>
+    <div id="container">
+        <video id="webcam" autoplay></video>
+        <canvas id="overlay"></canvas>
+    </div>
+    <div id="recommendation">Recommendations based on the detected attributes will appear here.</div>
+    <div id="results"></div>
     <script>
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('overlay');
         const context = canvas.getContext('2d');
         const recommendationElement = document.getElementById('recommendation');
+        const resultsElement = document.getElementById('results');
 
         async function setupWebcam() {
             try {
@@ -60,32 +76,51 @@
                 }
 
                 const result = await response.json();
-                drawOverlay(result);
-                if (result.headPose) {
-                    generateRecommendation(result.headPose, result.eyeStatus, result.emotion);
-                }
+                displayResults(result);
+                generateRecommendation(result.dominantEmotion);
             } catch (error) {
                 console.error('Error:', error);
                 recommendationElement.textContent = `Error: ${error.message}`;
             }
         }
 
-        function drawOverlay(result) {
+        function displayResults(result) {
             context.clearRect(0, 0, canvas.width, canvas.height);
             if (result.error) {
                 recommendationElement.textContent = result.error;
                 return;
             }
-            context.strokeStyle = 'red';
-            context.lineWidth = 2;
-            context.fillText(`Head Pose: ${JSON.stringify(result.headPose)}`, 10, 10);
-            context.fillText(`Eye Status: ${JSON.stringify(result.eyeStatus)}`, 10, 30);
-            context.fillText(`Emotion: ${JSON.stringify(result.emotion)}`, 10, 50);
+            resultsElement.textContent = `
+                Head Pose: ${JSON.stringify(result.headPose)}\n
+                Eye Status: ${JSON.stringify(result.eyeStatus)}\n
+                Emotion: ${JSON.stringify(result.emotion)}\n
+                Dominant Emotion: ${result.dominantEmotion}
+            `;
         }
 
-        async function generateRecommendation(headPose, eyeStatus, emotion) {
-            // You can add logic here to generate recommendations based on the detected attributes
-            recommendationElement.textContent = 'Recommendations based on the detected attributes will appear here.';
+        function generateRecommendation(dominantEmotion) {
+            // Customize recommendations based on the dominant emotion
+            let recommendation = '';
+            switch(dominantEmotion) {
+                case 'happiness':
+                    recommendation = 'You seem happy! How about some upbeat music or a fun video?';
+                    break;
+                case 'sadness':
+                    recommendation = 'It looks like you might be feeling down. Maybe try some relaxing content.';
+                    break;
+                case 'anger':
+                    recommendation = 'Feeling a bit angry? Some calming activities might help.';
+                    break;
+                case 'surprise':
+                    recommendation = 'You seem surprised! How about some exciting new content?';
+                    break;
+                case 'neutral':
+                    recommendation = 'You seem neutral. How about something to lift your mood?';
+                    break;
+                default:
+                    recommendation = 'We couldn’t quite read your mood. Maybe try again!';
+            }
+            recommendationElement.textContent = recommendation;
         }
 
         setupWebcam();

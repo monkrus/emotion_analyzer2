@@ -8,7 +8,6 @@ import logging
 
 app = FastAPI()
 
-<<<<<<< HEAD:app/app.py
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -21,12 +20,11 @@ FACEPP_API_ENDPOINT = os.getenv("FACEPP_API_ENDPOINT")
 # Ensure that the API key, secret, and endpoint are set
 if not FACEPP_API_KEY or not FACEPP_API_SECRET or not FACEPP_API_ENDPOINT:
     raise ValueError("One or more environment variables for Face++ API are not set.")
-=======
+
 # Face++ API Configuration
 FACEPP_API_KEY = "xxx"
 FACEPP_API_SECRET = "xxx"
 FACEPP_API_ENDPOINT = "https://api-us.faceplusplus.com/facepp/v3/detect"
->>>>>>> 8e874b001968365e83be9f392a891d1fb856f286:app.py
 
 # Mount the static directory to serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")

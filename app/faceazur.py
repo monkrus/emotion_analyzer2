@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 import requests
 import os
 import logging
-from collections import Counter
 
 app = FastAPI()
 
@@ -18,7 +17,7 @@ FACEPP_API_KEY = os.getenv("FACEPP_API_KEY")
 FACEPP_API_SECRET = os.getenv("FACEPP_API_SECRET")
 FACEPP_API_ENDPOINT = os.getenv("FACEPP_API_ENDPOINT")
 AZURE_FACE_API_KEY = os.getenv("AZURE_FACE_API_KEY")
-AZURE_FACE_API_ENDPOINT = os.getenv("AZURE_FACE_API_ENDPOINT")
+AZURE_FACE_API_ENDPOINT = os.getenv("AZURE_FACE_API_ENDPOINT") + "/face/v1.0/detect"
 
 # Ensure that all necessary API keys and endpoints are set
 if not FACEPP_API_KEY or not FACEPP_API_SECRET or not FACEPP_API_ENDPOINT:
@@ -34,6 +33,29 @@ async def main_page(request: Request):
     with open("static/index.html") as f:
         return HTMLResponse(content=f.read(), status_code=200)
 
+# Function to get head pose and eye status from Face++ API
+async def get_headpose_eyestatus_facepp(contents):
+    files = {'image_file': contents}
+    data = {
+        'api_key': FACEPP_API_KEY,
+        'api_secret': FACEPP_API_SECRET,
+        'return_attributes': 'headpose,eyestatus'
+    }
+    response = requests.post(FACEPP_API_ENDPOINT, files=files, data=data)
+    
+    # Log response details for debugging
+    logging.info(f"Face++ HeadPose & EyeStatus Response Status Code: {response.status_code}")
+    logging.info(f"Face++ HeadPose & EyeStatus Response Text: {response.text}")
+
+    response.raise_for_status()
+    
+    faces = response.json().get('faces', [])
+    if faces:
+        headpose = faces[0]['attributes']['headpose']
+        eyestatus = faces[0]['attributes']['eyestatus']
+        return headpose, eyestatus
+    return None, None
+
 # Function to get emotion from Face++ API
 async def get_emotion_facepp(contents):
     files = {'image_file': contents}
@@ -45,8 +67,8 @@ async def get_emotion_facepp(contents):
     response = requests.post(FACEPP_API_ENDPOINT, files=files, data=data)
     
     # Log response details for debugging
-    logging.info(f"Face++ Response Status Code: {response.status_code}")
-    logging.info(f"Face++ Response Text: {response.text}")
+    logging.info(f"Face++ Emotion Response Status Code: {response.status_code}")
+    logging.info(f"Face++ Emotion Response Text: {response.text}")
 
     response.raise_for_status()
     
@@ -94,35 +116,48 @@ def calculate_consensus(emotion1, emotion2):
 async def detect_emotions_consensus(file: UploadFile = File(...)):
     try:
         contents = await file.read()
-        
+
+        # Get head pose and eye status from Face++
+        headpose, eyestatus = await get_headpose_eyestatus_facepp(contents)
+
         # Get emotions from both APIs
         dominant_facepp, emotions_facepp = await get_emotion_facepp(contents)
         dominant_azure, emotions_azure = await get_emotion_azure(contents)
 
-        # If both APIs detected emotions, calculate the consensus
+        # Prepare the response with labeled results
+        response_data = {
+            "Face++ Head Pose": headpose,
+            "Face++ Eye Status": eyestatus,
+            "Face++ Emotion": {
+                "emotions": emotions_facepp,
+                "dominantEmotion": dominant_facepp
+            },
+            "Azure Emotion": {
+                "emotions": emotions_azure,
+                "dominantEmotion": dominant_azure
+            },
+        }
+
+        # Calculate consensus emotion if both APIs provided emotion data
         if emotions_facepp and emotions_azure:
-            dominant_emotion, consensus_emotion = calculate_consensus(emotions_facepp, emotions_azure)
-            return JSONResponse({
-                "faceppEmotion": emotions_facepp,
-                "azureEmotion": emotions_azure,
-                "consensusEmotion": consensus_emotion,
-                "dominantConsensusEmotion": dominant_emotion
-            })
+            consensus_emotion, consensus_emotions = calculate_consensus(emotions_facepp, emotions_azure)
+            response_data["Consensus Emotion"] = {
+                "emotions": consensus_emotions,
+                "dominantEmotion": consensus_emotion
+            }
+
+        # Generate the final human-readable output with labels
+        output = f"You seem {response_data['Face++ Emotion']['dominantEmotion']}. How about something to lift your mood?\n"
+        output += f"Face++ Head Pose: {response_data['Face++ Head Pose']}\n"
+        output += f"Face++ Eye Status: {response_data['Face++ Eye Status']}\n"
+        output += f"Face++ Emotion: {response_data['Face++ Emotion']['emotions']} (Dominant: {response_data['Face++ Emotion']['dominantEmotion']})\n"
+        output += f"Azure Emotion: {response_data['Azure Emotion']['emotions']} (Dominant: {response_data['Azure Emotion']['dominantEmotion']})\n"
         
-        # If only one API detected emotions, return those
-        if emotions_facepp:
-            return JSONResponse({
-                "faceppEmotion": emotions_facepp,
-                "dominantFaceppEmotion": dominant_facepp
-            })
-        if emotions_azure:
-            return JSONResponse({
-                "azureEmotion": emotions_azure,
-                "dominantAzureEmotion": dominant_azure
-            })
-        
-        return JSONResponse({"error": "No face detected by either API"}, status_code=400)
-    
+        if "Consensus Emotion" in response_data:
+            output += f"Consensus Emotion: {response_data['Consensus Emotion']['emotions']} (Dominant: {response_data['Consensus Emotion']['dominantEmotion']})"
+
+        return JSONResponse({"result": output})
+
     except requests.RequestException as e:
         logging.error(f"Request error: {str(e)}")
         return JSONResponse({"error": f"Request error: {str(e)}"}, status_code=400)
@@ -130,6 +165,7 @@ async def detect_emotions_consensus(file: UploadFile = File(...)):
         logging.error(f"Internal Server Error: {str(e)}")
         return JSONResponse({"error": f"Internal Server Error: {str(e)}"}, status_code=500)
 
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("faceazur:app", host="0.0.0.0", port=8002, reload=True)
